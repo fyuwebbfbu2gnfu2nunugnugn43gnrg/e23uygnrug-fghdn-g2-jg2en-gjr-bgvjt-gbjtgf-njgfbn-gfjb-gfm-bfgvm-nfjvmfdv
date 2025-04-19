@@ -344,196 +344,146 @@ if getgenv().Mooze["Global"]["Enabled"] then
     end)
 end
 
-do
-    local Players          = game:GetService("Players")
-    local LocalPlayer      = Players.LocalPlayer
-    local Camera           = workspace.CurrentCamera
-    local UserInputService = game:GetService("UserInputService")
-    local RunService       = game:GetService("RunService")
 
-    local config         = getgenv().Mooze
-    local triggerConfig  = config["Trigger Bot"]
-    local velocityConfig = config["Velocity Calculation"]
+local Players          = game:GetService("Players")
+local LocalPlayer      = Players.LocalPlayer
+local Camera           = workspace.CurrentCamera
+local UserInputService = game:GetService("UserInputService")
+local RunService       = game:GetService("RunService")
 
-    local Circle = Drawing.new("Circle")
-    Circle.Visible      = false
-    Circle.Transparency = 0
-    Circle.Color       = Color3.new(1,1,1)
-    Circle.Filled      = false
+local config         = getgenv().Mooze
+local triggerConfig  = config["Trigger Bot"]
+local velocityConfig = config["Velocity Calculation"]
 
-    local function GetPlayerTargetInFOV()
-    end
+local mouse  = LocalPlayer:GetMouse()
+local Circle = Drawing.new("Circle")
+Circle.Visible      = false
+Circle.Transparency = 0
+Circle.Color       = Color3.new(1,1,1)
+Circle.Filled      = false
 
-    local toggleKey = Enum.KeyCode[ triggerConfig.Activation["Activation Bind"]:upper() ]
-    UserInputService.InputBegan:Connect(function(input, gp)
-        if gp or input.KeyCode ~= toggleKey then return end
-        triggerConfig.Enabled = not triggerConfig.Enabled
-    end)
-
-    RunService.Heartbeat:Connect(function()
-        if not triggerConfig.Enabled then
-            Circle.Visible = false
-            return
-        end
-
-        if not isValid(LocalPlayer, "When selecting a player") then
-            Circle.Visible = false
-            return
-        end
-
-        local mouseLoc = UserInputService:GetMouseLocation()
-        Circle.Position = Vector2.new(mouseLoc.X, mouseLoc.Y)
-        Circle.Radius   = triggerConfig.FOV.X * 7
-        Circle.NumSides = math.floor(Circle.Radius * 10)
-        Circle.Visible  = true
-
-        local plr, part = GetPlayerTargetInFOV()
-        if plr and part and isValid(plr, "Whilst a player is selected") then
-            local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-            if tool and tool:FindFirstChild("Handle") then
-                local cleanName = tool.Name:lower():gsub("[%[%]%- ]","")
-                for _, w in ipairs(triggerConfig.Weapons) do
-                    if cleanName:find(w:lower():gsub("[%[%]%- ]",""),1,true) then
-                        tool:Activate()
-                        tool:Deactivate()
-                        break
-                    end
-                end
-            end
-        end
-    end)
+local function WallCheck(part)
+	local origin = Camera.CFrame.Position
+	local dir    = (part.Position - origin).Unit
+	local dist   = (part.Position - origin).Magnitude
+	local params = RaycastParams.new()
+	params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+	params.FilterType = Enum.RaycastFilterType.Blacklist
+	params.IgnoreWater = true
+	local hit = workspace:Raycast(origin, dir * dist, params)
+	if hit then
+		local mdl = hit.Instance:FindFirstAncestorOfClass("Model")
+		return not (mdl and Players:GetPlayerFromCharacter(mdl))
+	end
+	return false
 end
 
-do
-    local config         = getgenv().Mooze
-    local camConfig      = config["Camera Aimbot"]
-    local globalKeybind  = config.Global.Keybind or "E"
-    camConfig.Keybind    = globalKeybind
+local function isValid(plr, context)
+	local ctx = config.Global.Check[context]
+	if not ctx then return true end
+	local char = plr.Character
+	if not char then return false end
 
-    local Players         = game:GetService("Players")
-    local LocalPlayer     = Players.LocalPlayer
-    local UserInputService= game:GetService("UserInputService")
-    local RunService      = game:GetService("RunService")
-    local Camera          = workspace.CurrentCamera
+	local body    = char:FindFirstChild("BodyEffects")
+	local knocked = body and body:FindFirstChild("K.O") and body["K.O"].Value or false
+	if knocked and ctx.Knocked then return false end
+	if plr == LocalPlayer and knocked and ctx["Self-Knocked"] then return false end
 
-    local function WallCheck(part)
-        local origin = Camera.CFrame.Position
-        local dir    = (part.Position - origin).Unit
-        local dist   = (part.Position - origin).Magnitude
-        local params = RaycastParams.new()
-        params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
-        params.FilterType = Enum.RaycastFilterType.Blacklist
-        params.IgnoreWater = true
-        local hit = workspace:Raycast(origin, dir * dist, params)
-        if hit then
-            local mdl = hit.Instance:FindFirstAncestorOfClass("Model")
-            return not (mdl and Players:GetPlayerFromCharacter(mdl))
-        end
-        return false
-    end
-
-    local function isValid(plr, context)
-        local ctx = config.Global.Check[context]
-        if not ctx then return true end
-
-        local char = plr.Character
-        if not char then return false end
-
-        local body    = char:FindFirstChild("BodyEffects")
-        local knocked = body and body:FindFirstChild("K.O") and body["K.O"].Value or false
-        if knocked and ctx.Knocked then return false end
-        if plr == LocalPlayer and knocked and ctx["Self-Knocked"] then return false end
-        if ctx.Visible then
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp and WallCheck(hrp) then return false end
-        end
-        return true
-    end
-
-    local function getClosestPart(character)
-        local bestPart, bestDist = nil, math.huge
-        local mousePos = UserInputService:GetMouseLocation()
-
-        for _, p in ipairs(character:GetDescendants()) do
-            if p:IsA("BasePart") then
-                local screenPos, onScreen = Camera:WorldToViewportPoint(p.Position)
-                if onScreen then
-                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                    if dist < bestDist then
-                        bestDist, bestPart = dist, p
-                    end
-                end
-            end
-        end
-
-        return bestPart
-    end
-
-    local function getTarget()
-        local bestTarget, shortest = nil, math.huge
-        local mousePos = UserInputService:GetMouseLocation()
-
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LocalPlayer and isValid(plr, "When selecting a player") then
-                local part
-                if camConfig["Hit Part"]:lower() == "closest point" then
-                    part = getClosestPart(plr.Character)
-                else
-                    part = plr.Character:FindFirstChild("HumanoidRootPart")
-                end
-
-                if part then
-                    local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
-                    if onScreen then
-                        local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                        if dist < shortest then
-                            shortest, bestTarget = dist, part
-                        end
-                    end
-                end
-            end
-        end
-
-        return bestTarget
-    end
-
-    local aimbotKey = Enum.KeyCode[ camConfig.Keybind:upper() ]
-    UserInputService.InputBegan:Connect(function(input, gp)
-        if gp then return end
-        if input.KeyCode == aimbotKey then
-            camConfig.Enabled = not camConfig.Enabled
-        end
-    end)
-
-    local accumulator = 0
-    RunService.RenderStepped:Connect(function(dt)
-        if not isValid(LocalPlayer, "When selecting a player") then return end
-        if not camConfig.Enabled then return end
-        accumulator = accumulator + dt
-        if accumulator < 0.05 then return end
-        accumulator = 0
-
-        local targetPart = getTarget()
-        if targetPart then
-            local plr = Players:GetPlayerFromCharacter(targetPart.Parent)
-            if plr and isValid(plr, "Whilst a player is selected") then
-                local pred = Vector3.new(
-                    camConfig.Prediction.X,
-                    camConfig.Prediction.Y,
-                    camConfig.Prediction.Z
-                )
-                local aimPos = targetPart.Position + pred
-                local newCF  = CFrame.new(Camera.CFrame.Position, aimPos)
-                Camera.CFrame = Camera.CFrame:Lerp(newCF, camConfig.Snappiness)
-            end
-        end
-    end)
+	if ctx.Visible then
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if hrp and WallCheck(hrp) then return false end
+	end
+	return true
 end
 
-if not LPH_OBFUSCATED then
-    LPH_JIT_MAX = function(...) return (...) end
-    LPH_NO_VIRTUALIZE = function(...) return (...) end
+local function GetPlayerTargetInFOV()
+	local closestDist = math.huge
+	local targetPart, targetPlr = nil, nil
+
+	local radius    = triggerConfig.FOV.X * 7
+	local circlePos = Circle.Position
+	local pred      = triggerConfig.Prediction
+	local velOn     = velocityConfig.Enabled
+	local velMag    = velocityConfig.Magnitude
+
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and isValid(plr, "When selecting a player") then
+			local char = plr.Character
+			if char then
+				for _, part in ipairs(char:GetChildren()) do
+					if part:IsA("BasePart") and part.Transparency < 1 then
+						local pos = part.Position
+						if part.Name == "HumanoidRootPart" then
+							pos = pos + Vector3.new(pred.X, pred.Y, pred.Z)
+							if velOn and part.Velocity.Magnitude > velMag then
+								pos = pos + part.Velocity * 0.1
+							end
+						end
+
+						local screenPos, onScreen = Camera:WorldToScreenPoint(pos)
+						if onScreen and not WallCheck(part) then
+							local dist = (Vector2.new(screenPos.X, screenPos.Y) - circlePos).Magnitude
+							if dist <= radius and dist < closestDist then
+								closestDist = dist
+								targetPart  = part
+								targetPlr   = plr
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	return targetPlr, targetPart
 end
+
+local toggleKey = Enum.KeyCode[ triggerConfig.Activation["Activation Bind"]:upper() ]
+UserInputService.InputBegan:Connect(function(input, gp)
+	if not gp and input.KeyCode == toggleKey then
+		triggerConfig.Enabled = not triggerConfig.Enabled
+	end
+end)
+
+RunService.Heartbeat:Connect(function()
+	if triggerConfig.Enabled then
+		if not isValid(LocalPlayer, "When selecting a player") then
+			Circle.Visible = false
+			return
+		end
+
+		local mouseLoc  = UserInputService:GetMouseLocation()
+		Circle.Position = Vector2.new(mouseLoc.X, mouseLoc.Y)
+		Circle.Radius   = triggerConfig.FOV.X * 7
+		Circle.NumSides = math.floor(Circle.Radius * 10)
+		Circle.Visible  = true
+
+		local plr, part = GetPlayerTargetInFOV()
+		if plr and part and isValid(plr, "Whilst a player is selected") then
+			local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+			if tool and tool:FindFirstChild("Handle") then
+				local function clean(str)
+					return str:lower():gsub("[%[%]%- ]","")
+				end
+				local toolName = clean(tool.Name)
+				local allowed  = false
+				for _, w in ipairs(triggerConfig.Weapons) do
+					if toolName:find(clean(w),1,true) then
+						allowed = true
+						break
+					end
+				end
+
+				if allowed then
+					tool:Activate()
+					tool:Deactivate()
+				end
+			end
+		end
+	else
+		Circle.Visible = false
+	end
+end)
 
 LPH_JIT_MAX(function()
     local Config = getgenv().Mooze["Silent Aimbot"]
