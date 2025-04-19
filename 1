@@ -306,6 +306,57 @@ if not getgenv().Mooze or not getgenv().Mooze["Global"] or not getgenv().Mooze["
     return -- Entire script stops running if disabled
 end
 
+---------------------
+-- macro
+---------------------
+if getgenv().Mooze["Global"]["Enabled"] then
+    local LocalPlayer = game.Players.LocalPlayer
+    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local camera = workspace.CurrentCamera
+    local runService = game:GetService("RunService")
+    local userInputService = game:GetService("UserInputService")
+
+    local enabled = false -- Macro starts off disabled
+    local connection
+
+    local function updateCharacterFacing()
+        if character and character.PrimaryPart then
+            local cameraCFrame = camera.CFrame
+            local lookAtPosition = cameraCFrame.Position + cameraCFrame.LookVector * 70
+            lookAtPosition = Vector3.new(lookAtPosition.X, character.PrimaryPart.Position.Y, lookAtPosition.Z)
+            character:SetPrimaryPartCFrame(CFrame.new(character.PrimaryPart.Position, lookAtPosition))
+        end
+    end
+
+    local function onKeyPressed(input, gameProcessed)
+        if gameProcessed then return end
+        if input.KeyCode == Enum.KeyCode.X and not enabled then
+            enabled = true
+            print("Macro: ON (holding)")
+            connection = runService.RenderStepped:Connect(updateCharacterFacing)
+        end
+    end
+
+    local function onKeyReleased(input, gameProcessed)
+        if gameProcessed then return end
+        if input.KeyCode == Enum.KeyCode.X and enabled then
+            enabled = false
+            print("Macro: OFF (released)")
+            if connection then
+                connection:Disconnect()
+                connection = nil
+            end
+        end
+    end
+
+    userInputService.InputBegan:Connect(onKeyPressed)
+    userInputService.InputEnded:Connect(onKeyReleased)
+
+    LocalPlayer.CharacterAdded:Connect(function(newCharacter)
+        character = newCharacter
+        character:WaitForChild("PrimaryPart")
+    end)
+end
 
 --------------------------------------------------
 -- Trigger Bot Code with Velocity‑Based Lead Prediction
@@ -837,144 +888,7 @@ end)
 --------------------
 -- spread mod
 -------------------
--- services & shortcuts
-local Players   = game:GetService("Players")
-local RunSvc    = game:GetService("RunService")
-local player    = Players.LocalPlayer
-local task      = task
 
--- your base spreads (tweak if defaults change)
-local ORIGINAL_H = 0.1
-local ORIGINAL_V = 0.1
-
--- state
-local originalConstants = {}    -- [fn][idx] = original value
-local fnCache           = {}    -- [weaponKeyNorm] = { fn1, fn2, … }
-local discovered        = false
-
--- normalize for matching
-local function normalize(s)
-    return tostring(s):lower():gsub("%W", "")
-end
-
--- pull your config
-local function getSpreadConfig()
-    local g = getgenv().Mooze
-    return g and g["Weapon Modifications"] and g["Weapon Modifications"]["Spread Modifications"]
-end
-
--- restore all patched constants
-local function restoreAll()
-    for fn, idxs in pairs(originalConstants) do
-        for idx, orig in pairs(idxs) do
-            pcall(debug.setconstant, fn, idx, orig)
-        end
-    end
-end
-
--- discover & cache all the weapon‐fn closures once
-local function discoverFunctions()
-    if discovered then return end
-    local cfg = getSpreadConfig()
-    if not (cfg and cfg.Enabled ~= nil) then return end
-
-    for weaponKey, settings in pairs(cfg) do
-        if weaponKey ~= "Enabled" and type(settings) == "table" then
-            local keyNorm = normalize(weaponKey)
-            fnCache[keyNorm] = {}
-
-            for _, fn in ipairs(getgc(true)) do
-                if type(fn)=="function"
-                and islclosure(fn)
-                and not isexecutorclosure(fn)
-                then
-                    local info = debug.getinfo(fn)
-                    if info.short_src and normalize(info.short_src):find(keyNorm,1,true) then
-                        table.insert(fnCache[keyNorm], fn)
-                    end
-                end
-            end
-        end
-    end
-
-    discovered = true
-end
-
--- apply one pass of patches
-local function applySpreadOnce()
-    local cfg = getSpreadConfig()
-    if not cfg then return end
-
-    -- disabled? restore and bail
-    if not cfg.Enabled then
-        restoreAll()
-        return
-    end
-
-    -- make sure we've cached all the fns
-    discoverFunctions()
-
-    -- loop each weapon in config
-    for weaponKey, settings in pairs(cfg) do
-        if weaponKey ~= "Enabled" and type(settings)=="table" then
-            local mult    = settings.Multiplier
-            local hSpread = ORIGINAL_H * mult
-            local vSpread = ORIGINAL_V * mult
-            local keyNorm = normalize(weaponKey)
-            local fns     = fnCache[keyNorm] or {}
-
-            for _, fn in ipairs(fns) do
-                -- patch each constant once
-                for idx, const in ipairs(debug.getconstants(fn)) do
-                    if type(const)=="number" then
-                        -- horizontal (<0.1)
-                        if const > 0 and const < 0.1 then
-                            originalConstants[fn] = originalConstants[fn] or {}
-                            originalConstants[fn][idx] = originalConstants[fn][idx] or const
-                            pcall(debug.setconstant, fn, idx, hSpread)
-
-                        -- vertical (0.1–0.3)
-                        elseif const >= 0.1 and const < 0.3 then
-                            originalConstants[fn] = originalConstants[fn] or {}
-                            originalConstants[fn][idx] = originalConstants[fn][idx] or const
-                            pcall(debug.setconstant, fn, idx, vSpread)
-                        end
-                    end
-                end
-            end
-        end
-    end
-end
-
--- main loop: retries every few seconds so that late‑loading modules still get caught
-local patchLoop
-local function startPatchLoop()
-    if patchLoop then return end
-    patchLoop = task.spawn(function()
-        while player and player.Character do
-            applySpreadOnce()
-            task.wait(3)        -- tweak this interval as needed
-        end
-    end)
-end
-
--- on respawn: clear caches & restart
-local function onCharacterAdded()
-    originalConstants = {}
-    fnCache           = {}
-    discovered        = false
-    patchLoop         = nil
-    task.wait(1)        -- small delay before starting loop
-    startPatchLoop()
-end
-
--- hook up
-player.CharacterAdded:Connect(onCharacterAdded)
-
--- if you already have a character loaded
-if player.Character then
-    onCharacterAdded()
-end
 -----------------------------
 -- Speed Modification 
 -----------------------------------
