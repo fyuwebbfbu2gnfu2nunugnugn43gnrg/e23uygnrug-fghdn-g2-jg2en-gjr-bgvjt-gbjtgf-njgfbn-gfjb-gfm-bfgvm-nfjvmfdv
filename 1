@@ -722,6 +722,7 @@ end
 ---------------------------------------------------------
 -- Enhanced Silent Aimbot
 ---------------------------------------------------------
+-- Enhanced Silent Aimbot (FOV Accuracy Fix)
 if not LPH_OBFUSCATED then
     LPH_JIT_MAX = function(...) return (...) end
     LPH_NO_VIRTUALIZE = function(...) return (...) end
@@ -735,7 +736,6 @@ LPH_JIT_MAX(function()
     local LocalPlayer = Players.LocalPlayer
     local Camera = workspace.CurrentCamera
 
-    local lastMousePos = Vector2.new()
     local cachedTarget = nil
 
     -- Utility: Check if a player is valid
@@ -752,26 +752,6 @@ LPH_JIT_MAX(function()
         return player.Team ~= LocalPlayer.Team
     end
 
-    -- Get closest part to cursor
-    local function getClosestPart(player)
-        local bestPart, shortestDist = nil, math.huge
-        local pointScale = Config["Closest Point"] and Config["Closest Point"]["Point Scale"] or 1.0
-
-        for _, part in pairs(player.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
-                if onScreen then
-                    local part2d = Vector2.new(screenPos.X, screenPos.Y)
-                    local dist = (lastMousePos - part2d).Magnitude * pointScale
-                    if dist < shortestDist then
-                        bestPart, shortestDist = part, dist
-                    end
-                end
-            end
-        end
-        return bestPart
-    end
-
     -- Drawing FOV circle
     local FOVCircle = Drawing.new("Circle")
     FOVCircle.Thickness = 2
@@ -779,40 +759,61 @@ LPH_JIT_MAX(function()
     FOVCircle.Filled = false
     FOVCircle.Transparency = 1
 
-    -- Update FOV, draw, and select target
-    local function updateFOV()
-        lastMousePos = UserInputService:GetMouseLocation()
-        local fovCfg = Config["FOV"]
-        local radius = fovCfg["Size"].X * 7
-        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+    -- Convert world-space FOV angle to pixel radius
+    local function worldFovToPixels(angleDeg)
+        local fovRad = math.rad(angleDeg)
+        local halfScreen = Camera.ViewportSize.Y / 2
+        local screenFovRad = math.rad(Camera.FieldOfView / 2)
+        return math.tan(fovRad) * (halfScreen / math.tan(screenFovRad))
+    end
 
-        -- Weapon-specific scaling
-        if fovCfg["Weapons Configuration"] and fovCfg["Weapons Configuration"]["Enabled"] and tool then
-            local tname = string.lower(tool.Name)
-            if string.find(tname, "shotgun") then
-                radius = fovCfg["Weapons Configuration"]["Shotguns"].X * 7
-            elseif string.find(tname, "pistol") then
-                radius = fovCfg["Weapons Configuration"]["Pistols"].X * 7
+    -- Update FOV, draw, and select target using world-angle method
+    local function updateFOV()
+        local fovCfg = Config["FOV"]
+        local angleDeg = fovCfg["Size"].X * 7 -- user config angle in degrees
+        local pixelRadius = worldFovToPixels(angleDeg)
+
+        -- Weapon-specific scaling (optional override angle)
+        if fovCfg["Weapons Configuration"] and fovCfg["Weapons Configuration"]["Enabled"] then
+            local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+            if tool then
+                local tname = string.lower(tool.Name)
+                if string.find(tname, "shotgun") then
+                    angleDeg = fovCfg["Weapons Configuration"]["Shotguns"].X * 7
+                elseif string.find(tname, "pistol") then
+                    angleDeg = fovCfg["Weapons Configuration"]["Pistols"].X * 7
+                end
+                pixelRadius = worldFovToPixels(angleDeg)
             end
         end
 
         FOVCircle.Visible = fovCfg["Enabled"]
-        FOVCircle.Position = lastMousePos
-        FOVCircle.Radius = radius
+        FOVCircle.Position = UserInputService:GetMouseLocation()
+        FOVCircle.Radius = pixelRadius
 
-        -- Find best target in FOV
-        local bestPart, bestDist = nil, math.huge
+        -- Find best target within world-space FOV
+        local bestPart, bestAngle = nil, math.huge
         for _, pl in pairs(Players:GetPlayers()) do
             if isValidTarget(pl) and isEnemy(pl) then
-                local part = (Config["Hit Part"] == "Closest Point") and getClosestPart(pl)
-                              or pl.Character:FindFirstChild("Head")
-                if part then
-                    local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
-                    if onScreen then
-                        local dist2d = (lastMousePos - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
-                        if dist2d < bestDist and dist2d <= FOVCircle.Radius then
-                            bestPart, bestDist = part, dist2d
+                local part = (Config["Hit Part"] == "Closest Point") and pl.Character and (function()
+                        -- reuse original getClosestPart logic if desired
+                        local closest, shortest = nil, math.huge
+                        for _, p in pairs(pl.Character:GetDescendants()) do
+                            if p:IsA("BasePart") then
+                                local dir = (p.Position - Camera.CFrame.Position).Unit
+                                local ang = math.deg(math.acos(Camera.CFrame.LookVector:Dot(dir)))
+                                if ang < shortest then
+                                    closest, shortest = p, ang
+                                end
+                            end
                         end
+                        return closest
+                    end)() or pl.Character and pl.Character:FindFirstChild("Head")
+                if part then
+                    local dir = (part.Position - Camera.CFrame.Position).Unit
+                    local ang = math.deg(math.acos(Camera.CFrame.LookVector:Dot(dir)))
+                    if ang <= angleDeg and ang < bestAngle then
+                        bestPart, bestAngle = part, ang
                     end
                 end
             end
@@ -823,21 +824,19 @@ LPH_JIT_MAX(function()
 
     -- Apply prediction offset
     local function applyPrediction(cf, offset)
-        return cf * CFrame.new(offset.X, offset.Y, offset.Z)
+        return cf * CFrame.new(offset.X * 7, offset.Y, offset.Z)
     end
 
-    -- Hijack Mouse Hit/Target but only when target inside FOV
+    -- Hijack Mouse Hit/Target when inside FOV
     local mt = getrawmetatable(game)
     setreadonly(mt, false)
     local originalIndex = mt.__index
     mt.__index = newcclosure(function(self, prop)
         if self:IsA("Mouse") and (prop == "Hit" or prop == "Target") then
             if cachedTarget then
-                -- Determine prediction settings
                 local pred = Config["Prediction"]
                 local redir = Config["Client Bullet Redirection"]
                 local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                -- Override if redirection enabled for this weapon
                 if redir["Enabled"] and tool then
                     for _, wname in ipairs(redir["Weapons"]) do
                         if string.find(string.lower(tool.Name), string.lower(wname)) then
@@ -846,10 +845,10 @@ LPH_JIT_MAX(function()
                         end
                     end
                 end
-                local velocityOffset = cachedTarget.Velocity * Vector3.new(pred.X, pred.Y, pred.Z)
+                local velocityOffset = cachedTarget.Velocity * Vector3.new(pred.X * 7, pred.Y, pred.Z)
                 if prop == "Hit" then
                     return applyPrediction(cachedTarget.CFrame, velocityOffset)
-                else -- Target
+                else
                     return cachedTarget
                 end
             end
@@ -858,7 +857,6 @@ LPH_JIT_MAX(function()
     end)
     setreadonly(mt, true)
 end)()
-
 -----------------------------------
 -- Slowdown Modification 
 -----------------------------------
