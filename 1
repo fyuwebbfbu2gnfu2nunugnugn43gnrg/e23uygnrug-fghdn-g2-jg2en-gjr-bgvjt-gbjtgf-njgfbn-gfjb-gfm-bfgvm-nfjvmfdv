@@ -351,10 +351,20 @@ local Camera           = workspace.CurrentCamera
 local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
 
+-- Cache config
 local config         = getgenv().Mooze
 local triggerConfig  = config["Trigger Bot"]
 local velocityConfig = config["Velocity Calculation"]
 
+-- Pre‑build your allowed‑parts list
+local allowedPartsList = {
+    "Head","UpperTorso","HumanoidRootPart","LowerTorso",
+    "LeftHand","RightHand","LeftLowerArm","RightLowerArm",
+    "LeftUpperArm","RightUpperArm","LeftFoot","LeftLowerLeg",
+    "LeftUpperLeg","RightLowerLeg","RightFoot","RightUpperLeg"
+}
+
+-- Mouse & FOV circle
 local mouse  = LocalPlayer:GetMouse()
 local Circle = Drawing.new("Circle")
 Circle.Visible      = false
@@ -362,127 +372,158 @@ Circle.Transparency = 0
 Circle.Color       = Color3.new(1,1,1)
 Circle.Filled      = false
 
+-- Simple wall‑check as before
 local function WallCheck(part)
-	local origin = Camera.CFrame.Position
-	local dir    = (part.Position - origin).Unit
-	local dist   = (part.Position - origin).Magnitude
-	local params = RaycastParams.new()
-	params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
-	params.FilterType = Enum.RaycastFilterType.Blacklist
-	params.IgnoreWater = true
-	local hit = workspace:Raycast(origin, dir * dist, params)
-	if hit then
-		local mdl = hit.Instance:FindFirstAncestorOfClass("Model")
-		return not (mdl and Players:GetPlayerFromCharacter(mdl))
-	end
-	return false
+    local origin = Camera.CFrame.Position
+    local dir    = (part.Position - origin).Unit
+    local dist   = (part.Position - origin).Magnitude
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.IgnoreWater = true
+    local hit = workspace:Raycast(origin, dir * dist, params)
+    if hit then
+        local mdl = hit.Instance:FindFirstAncestorOfClass("Model")
+        return not (mdl and Players:GetPlayerFromCharacter(mdl))
+    end
+    return false
 end
 
+-- Utility: check knock & visibility per context
 local function isValid(plr, context)
-	local ctx = config.Global.Check[context]
-	if not ctx then return true end
-	local char = plr.Character
-	if not char then return false end
+    local ctx = config.Global.Check[context]
+    if not ctx then return true end
 
-	local body    = char:FindFirstChild("BodyEffects")
-	local knocked = body and body:FindFirstChild("K.O") and body["K.O"].Value or false
-	if knocked and ctx.Knocked then return false end
-	if plr == LocalPlayer and knocked and ctx["Self-Knocked"] then return false end
+    local char = plr.Character
+    if not char then
+        return false
+    end
 
-	if ctx.Visible then
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		if hrp and WallCheck(hrp) then return false end
-	end
-	return true
+    local body    = char:FindFirstChild("BodyEffects")
+    local knocked = body and body:FindFirstChild("K.O") and body["K.O"].Value or false
+    if knocked and ctx.Knocked then
+        return false
+    end
+
+    if plr == LocalPlayer and knocked and ctx["Self-Knocked"] then
+        return false
+    end
+
+    if ctx.Visible then
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp and WallCheck(hrp) then
+            return false
+        end
+    end
+
+    return true
 end
 
-local function GetPlayerTargetInFOV()
-	local closestDist = math.huge
-	local targetPart, targetPlr = nil, nil
+-- Find the closest target inside the circle (applies selection checks)
+local scanInterval  = 0.033
+local timeSinceLast = scanInterval
 
-	local radius    = triggerConfig.FOV.X * 7
-	local circlePos = Circle.Position
-	local pred      = triggerConfig.Prediction
-	local velOn     = velocityConfig.Enabled
-	local velMag    = velocityConfig.Magnitude
+local function GetPlayerInCircle()
+    local closestDist = math.huge
+    local bestPlayer  = nil
 
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr ~= LocalPlayer and isValid(plr, "When selecting a player") then
-			local char = plr.Character
-			if char then
-				for _, part in ipairs(char:GetChildren()) do
-					if part:IsA("BasePart") and part.Transparency < 1 then
-						local pos = part.Position
-						if part.Name == "HumanoidRootPart" then
-							pos = pos + Vector3.new(pred.X, pred.Y, pred.Z)
-							if velOn and part.Velocity.Magnitude > velMag then
-								pos = pos + part.Velocity * 0.1
-							end
-						end
+    local circlePos = Circle.Position
+    local radius    = Circle.Radius
+    local pred      = triggerConfig.Prediction
+    local velOn     = velocityConfig.Enabled
+    local velMag    = velocityConfig.Magnitude
 
-						local screenPos, onScreen = Camera:WorldToScreenPoint(pos)
-						if onScreen and not WallCheck(part) then
-							local dist = (Vector2.new(screenPos.X, screenPos.Y) - circlePos).Magnitude
-							if dist <= radius and dist < closestDist then
-								closestDist = dist
-								targetPart  = part
-								targetPlr   = plr
-							end
-						end
-					end
-				end
-			end
-		end
-	end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and isValid(plr, "When selecting a player") then
+            local char = plr.Character
+            for _, partName in ipairs(allowedPartsList) do
+                local part = char:FindFirstChild(partName)
+                if part and part.Transparency < 1 then
+                    local pos = part.Position
+                    if partName == "HumanoidRootPart" then
+                        pos = pos + Vector3.new(pred.X, pred.Y, pred.Z)
+                        if velOn then
+                            local v = part.Velocity
+                            if v.Magnitude > velMag then
+                                pos = pos + v * 0.1
+                            end
+                        end
+                    end
 
-	return targetPlr, targetPart
+                    local screenPos, onScreen = Camera:WorldToScreenPoint(pos)
+                    if onScreen then
+                        if not (config.Global.Check["When selecting a player"].Visible and WallCheck(part)) then
+                            local dist = (Vector2.new(screenPos.X, screenPos.Y) - circlePos).Magnitude
+                            if dist <= radius and dist < closestDist then
+                                closestDist = dist
+                                bestPlayer  = plr
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return bestPlayer
 end
 
+-- Toggle bind
 local toggleKey = Enum.KeyCode[ triggerConfig.Activation["Activation Bind"]:upper() ]
 UserInputService.InputBegan:Connect(function(input, gp)
-	if not gp and input.KeyCode == toggleKey then
-		triggerConfig.Enabled = not triggerConfig.Enabled
-	end
+    if not gp and input.KeyCode == toggleKey then
+        triggerConfig.Enabled = not triggerConfig.Enabled
+    end
 end)
 
-RunService.Heartbeat:Connect(function()
-	if triggerConfig.Enabled then
-		if not isValid(LocalPlayer, "When selecting a player") then
-			Circle.Visible = false
-			return
-		end
+-- Main loop, throttled
+RunService.Heartbeat:Connect(function(dt)
+    timeSinceLast = timeSinceLast + dt
+    if timeSinceLast < scanInterval then return end
+    timeSinceLast = 0
 
-		local mouseLoc  = UserInputService:GetMouseLocation()
-		Circle.Position = Vector2.new(mouseLoc.X, mouseLoc.Y)
-		Circle.Radius   = triggerConfig.FOV.X * 7
-		Circle.NumSides = math.floor(Circle.Radius * 10)
-		Circle.Visible  = true
+    if triggerConfig.Enabled then
+        if not isValid(LocalPlayer, "When selecting a player") then
+            Circle.Visible = false
+            return
+        end
 
-		local plr, part = GetPlayerTargetInFOV()
-		if plr and part and isValid(plr, "Whilst a player is selected") then
-			local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
-			if tool and tool:FindFirstChild("Handle") then
-				local function clean(str)
-					return str:lower():gsub("[%[%]%- ]","")
-				end
-				local toolName = clean(tool.Name)
-				local allowed  = false
-				for _, w in ipairs(triggerConfig.Weapons) do
-					if toolName:find(clean(w),1,true) then
-						allowed = true
-						break
-					end
-				end
+        local mouseLoc      = UserInputService:GetMouseLocation()
+        Circle.Position     = Vector2.new(mouseLoc.X, mouseLoc.Y)
+        Circle.Radius       = triggerConfig.FOV.X * 7
+        Circle.NumSides     = math.floor(Circle.Radius * 10)
+        Circle.Visible      = true
 
-				if allowed then
-					tool:Activate()
-					tool:Deactivate()
-				end
-			end
-		end
-	else
-		Circle.Visible = false
-	end
+        local target = GetPlayerInCircle()
+        if target then
+            if not isValid(target, "Whilst a player is selected") then
+                return
+            end
+
+            local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+            if tool and tool:FindFirstChild("Handle") then
+                local function clean(str)
+                    return str:lower():gsub("[%[%]%- ]","")
+                end
+                local toolName = clean(tool.Name)
+                local allowed  = false
+                for _, w in ipairs(triggerConfig.Weapons) do
+                    if toolName:find(clean(w),1,true) then
+                        allowed = true
+                        break
+                    end
+                end
+
+                if allowed and tick() - (LastActivationTime or 0) >= triggerConfig["Click Cooldown"] then
+                    tool:Activate()
+                    tool:Deactivate()
+                    LastActivationTime = tick()
+                end
+            end
+        end
+    else
+        Circle.Visible = false
+    end
 end)
 
 LPH_JIT_MAX(function()
