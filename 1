@@ -11,7 +11,6 @@ local whitelist = {
     ["EBFADE5D-0C6D-4DA8-B830-45F23882BBC3"] = true,
     ["629A149A-E87F-4E6B-97B3-1780465ED703"] = true,
     ["29C10EC9-F738-4CD0-B99E-2CDEB706EBD6"] = true,
-    
 }
 
 local hwid = getHWID()
@@ -19,6 +18,13 @@ if not whitelist[hwid] then
     LocalPlayer:Kick("Your HWID is not whitelisted!")
 end
 
+local accessGranted = false
+local otherThingLoaded = false
+
+spawn(function()
+    wait(1)
+    otherThingLoaded = true
+end)
 
 local accessGranted = false
 local otherThingLoaded = false
@@ -302,8 +308,8 @@ repeat task.wait() until accessGranted
 --------------------------------------------------
 -- Global Enable Check
 --------------------------------------------------
-if not getgenv().Mooze or not getgenv().Mooze["Global"] or not getgenv().Mooze["Global"]["Enabled"] then
-    return -- Entire script stops running if disabled
+if not getgenv().Mooze or not getgenv().Mooze.Global or not getgenv().Mooze.Global.Enabled then
+    return
 end
 
 ---------------------
@@ -322,7 +328,7 @@ if getgenv().Mooze["Global"]["Enabled"] then
     local function updateCharacterFacing()
         if character and character.PrimaryPart then
             local cameraCFrame = camera.CFrame
-            local lookAtPosition = cameraCFrame.Position + cameraCFrame.LookVector * 70
+            local lookAtPosition = cameraCFrame.Position + cameraCFrame.LookVector * 100
             lookAtPosition = Vector3.new(lookAtPosition.X, character.PrimaryPart.Position.Y, lookAtPosition.Z)
             character:SetPrimaryPartCFrame(CFrame.new(character.PrimaryPart.Position, lookAtPosition))
         end
@@ -360,6 +366,7 @@ end
 
 --------------------------------------------------
 -- Trigger Bot Code with Velocity‑Based Lead Prediction
+-- + Closest‑Point Integration (no more allowed‑parts list)
 -- + Global KO / Visibility Checks per getgenv().Mooze
 --------------------------------------------------
 
@@ -374,14 +381,6 @@ local config         = getgenv().Mooze
 local triggerConfig  = config["Trigger Bot"]
 local velocityConfig = config["Velocity Calculation"]
 
--- Pre‑build your allowed‑parts list
-local allowedPartsList = {
-    "Head","UpperTorso","HumanoidRootPart","LowerTorso",
-    "LeftHand","RightHand","LeftLowerArm","RightLowerArm",
-    "LeftUpperArm","RightUpperArm","LeftFoot","LeftLowerLeg",
-    "LeftUpperLeg","RightLowerLeg","RightFoot","RightUpperLeg"
-}
-
 -- Mouse & FOV circle
 local mouse  = LocalPlayer:GetMouse()
 local Circle = Drawing.new("Circle")
@@ -390,7 +389,40 @@ Circle.Transparency = 0
 Circle.Color       = Color3.new(1,1,1)
 Circle.Filled      = false
 
--- Simple wall‑check as before
+--------------------------------------------------
+-- Your Closest‑Point Calculator
+--------------------------------------------------
+local function GetClosestPointOfPart(part)
+    local mr = mouse.UnitRay
+    -- Project ray to the plane of the part
+    local maxDist = (part.Position - mr.Origin).Magnitude
+    local rayPoint = mr.Origin + mr.Direction * maxDist
+
+    -- Clamp Y to part's vertical bounds
+    local minY = (part.Position - part.Size/2).Y
+    local maxY = (part.Position + part.Size/2).Y
+    local point
+    if rayPoint.Y >= minY and rayPoint.Y <= maxY then
+        point = Vector3.new(part.Position.X, rayPoint.Y, part.Position.Z)
+    else
+        point = part.Position
+    end
+
+    -- Raycast back onto the part
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Whitelist
+    params.FilterDescendantsInstances = {part}
+    local hit = workspace:Raycast(rayPoint, (point - rayPoint), params)
+    if hit then
+        return hit.Position
+    else
+        return mouse.Hit.Position
+    end
+end
+
+--------------------------------------------------
+-- Wall‑Check (unchanged)
+--------------------------------------------------
 local function WallCheck(part)
     local origin = Camera.CFrame.Position
     local dir    = (part.Position - origin).Unit
@@ -407,37 +439,30 @@ local function WallCheck(part)
     return false
 end
 
--- Utility: check knock & visibility per context
+--------------------------------------------------
+-- Validity Checks (unchanged)
+--------------------------------------------------
 local function isValid(plr, context)
     local ctx = config.Global.Check[context]
     if not ctx then return true end
-
     local char = plr.Character
-    if not char then
-        return false
-    end
+    if not char then return false end
 
     local body    = char:FindFirstChild("BodyEffects")
     local knocked = body and body:FindFirstChild("K.O") and body["K.O"].Value or false
-    if knocked and ctx.Knocked then
-        return false
-    end
-
-    if plr == LocalPlayer and knocked and ctx["Self-Knocked"] then
-        return false
-    end
+    if knocked and ctx.Knocked then return false end
+    if plr == LocalPlayer and knocked and ctx["Self-Knocked"] then return false end
 
     if ctx.Visible then
         local hrp = char:FindFirstChild("HumanoidRootPart")
-        if hrp and WallCheck(hrp) then
-            return false
-        end
+        if hrp and WallCheck(hrp) then return false end
     end
-
     return true
 end
 
--- Find the closest target inside the circle (applies selection checks)
+--------------------------------------------------
+-- New: Find Closest Player by True Closest‑Point
+--------------------------------------------------
 local scanInterval  = 0.033
 local timeSinceLast = scanInterval
 
@@ -446,7 +471,7 @@ local function GetPlayerInCircle()
     local bestPlayer  = nil
 
     local circlePos = Circle.Position
-    local radius    = Circle.Radius
+    local radius    = triggerConfig.FOV.X * 7
     local pred      = triggerConfig.Prediction
     local velOn     = velocityConfig.Enabled
     local velMag    = velocityConfig.Magnitude
@@ -454,23 +479,21 @@ local function GetPlayerInCircle()
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer and isValid(plr, "When selecting a player") then
             local char = plr.Character
-            for _, partName in ipairs(allowedPartsList) do
-                local part = char:FindFirstChild(partName)
-                if part and part.Transparency < 1 then
-                    local pos = part.Position
-                    if partName == "HumanoidRootPart" then
-                        pos = pos + Vector3.new(pred.X, pred.Y, pred.Z)
-                        if velOn then
-                            local v = part.Velocity
-                            if v.Magnitude > velMag then
-                                pos = pos + v * 0.1
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") and part.Transparency < 1 then
+                        local point = GetClosestPointOfPart(part)
+
+                        -- Apply lead prediction on HumanoidRootPart
+                        if part.Name == "HumanoidRootPart" then
+                            point = point + Vector3.new(pred.X, pred.Y, pred.Z)
+                            if velOn and part.Velocity.Magnitude > velMag then
+                                point = point + part.Velocity * 0.1
                             end
                         end
-                    end
 
-                    local screenPos, onScreen = Camera:WorldToScreenPoint(pos)
-                    if onScreen then
-                        if not (config.Global.Check["When selecting a player"].Visible and WallCheck(part)) then
+                        local screenPos, onScreen = Camera:WorldToScreenPoint(point)
+                        if onScreen and not (config.Global.Check["When selecting a player"].Visible and WallCheck(part)) then
                             local dist = (Vector2.new(screenPos.X, screenPos.Y) - circlePos).Magnitude
                             if dist <= radius and dist < closestDist then
                                 closestDist = dist
@@ -486,7 +509,9 @@ local function GetPlayerInCircle()
     return bestPlayer
 end
 
--- Toggle bind
+--------------------------------------------------
+-- Toggle & Main Loop (unchanged)
+--------------------------------------------------
 local toggleKey = Enum.KeyCode[ triggerConfig.Activation["Activation Bind"]:upper() ]
 UserInputService.InputBegan:Connect(function(input, gp)
     if not gp and input.KeyCode == toggleKey then
@@ -494,7 +519,6 @@ UserInputService.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- Main loop, throttled
 RunService.Heartbeat:Connect(function(dt)
     timeSinceLast = timeSinceLast + dt
     if timeSinceLast < scanInterval then return end
@@ -506,18 +530,14 @@ RunService.Heartbeat:Connect(function(dt)
             return
         end
 
-        local mouseLoc      = UserInputService:GetMouseLocation()
-        Circle.Position     = Vector2.new(mouseLoc.X, mouseLoc.Y)
-        Circle.Radius       = triggerConfig.FOV.X * 7
-        Circle.NumSides     = math.floor(Circle.Radius * 10)
-        Circle.Visible      = true
+        local mouseLoc  = UserInputService:GetMouseLocation()
+        Circle.Position = Vector2.new(mouseLoc.X, mouseLoc.Y)
+        Circle.Radius   = triggerConfig.FOV.X * 7
+        Circle.NumSides = math.floor(Circle.Radius * 10)
+        Circle.Visible  = true
 
         local target = GetPlayerInCircle()
-        if target then
-            if not isValid(target, "Whilst a player is selected") then
-                return
-            end
-
+        if target and isValid(target, "Whilst a player is selected") then
             local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
             if tool and tool:FindFirstChild("Handle") then
                 local function clean(str)
@@ -543,155 +563,6 @@ RunService.Heartbeat:Connect(function(dt)
         Circle.Visible = false
     end
 end)
-
---------------------------------------------------
--- Camera Aimbot (with KO/Visibility Checks)
---------------------------------------------------
-do
-    local config         = getgenv().Mooze
-    local camConfig      = config["Camera Aimbot"]
-    local globalKeybind  = config.Global.Keybind or "E"
-    camConfig.Keybind    = globalKeybind
-
-    local Players         = game:GetService("Players")
-    local LocalPlayer     = Players.LocalPlayer
-    local UserInputService= game:GetService("UserInputService")
-    local RunService      = game:GetService("RunService")
-    local Camera          = workspace.CurrentCamera
-
-    -- Simple wall‑check
-    local function WallCheck(part)
-        local origin = Camera.CFrame.Position
-        local dir    = (part.Position - origin).Unit
-        local dist   = (part.Position - origin).Magnitude
-        local params = RaycastParams.new()
-        params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
-        params.FilterType = Enum.RaycastFilterType.Blacklist
-        params.IgnoreWater = true
-        local hit = workspace:Raycast(origin, dir * dist, params)
-        if hit then
-            local mdl = hit.Instance:FindFirstAncestorOfClass("Model")
-            return not (mdl and Players:GetPlayerFromCharacter(mdl))
-        end
-        return false
-    end
-
-    -- KO/visibility helper
-    local function isValid(plr, context)
-        local ctx = config.Global.Check[context]
-        if not ctx then return true end
-
-        local char = plr.Character
-        if not char then
-            return false
-        end
-
-        local body    = char:FindFirstChild("BodyEffects")
-        local knocked = body and body:FindFirstChild("K.O") and body["K.O"].Value or false
-        if knocked and ctx.Knocked then
-            return false
-        end
-
-        if plr == LocalPlayer and knocked and ctx["Self-Knocked"] then
-            return false
-        end
-
-        if ctx.Visible then
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp and WallCheck(hrp) then
-                return false
-            end
-        end
-
-        return true
-    end
-
-    -- get the single best part to aim at
-    local function getClosestPart(character)
-        local bestPart, bestDist = nil, math.huge
-        local mousePos = UserInputService:GetMouseLocation()
-
-        for _, p in ipairs(character:GetDescendants()) do
-            if p:IsA("BasePart") then
-                local screenPos, onScreen = Camera:WorldToViewportPoint(p.Position)
-                if onScreen then
-                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                    if dist < bestDist then
-                        bestDist, bestPart = dist, p
-                    end
-                end
-            end
-        end
-
-        return bestPart
-    end
-
-    -- scan for best target
-    local function getTarget()
-        local bestTarget, shortest = nil, math.huge
-        local mousePos = UserInputService:GetMouseLocation()
-
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LocalPlayer and isValid(plr, "When selecting a player") then
-                local part
-                if camConfig["Hit Part"]:lower() == "closest point" then
-                    part = getClosestPart(plr.Character)
-                else
-                    part = plr.Character:FindFirstChild("HumanoidRootPart")
-                end
-
-                if part then
-                    local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
-                    if onScreen then
-                        local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                        if dist < shortest then
-                            shortest, bestTarget = dist, part
-                        end
-                    end
-                end
-            end
-        end
-
-        return bestTarget
-    end
-
-    -- keybind toggle
-    local aimbotKey = Enum.KeyCode[ camConfig.Keybind:upper() ]
-    UserInputService.InputBegan:Connect(function(input, gp)
-        if gp then return end
-        if input.KeyCode == aimbotKey then
-            camConfig.Enabled = not camConfig.Enabled
-        end
-    end)
-
-    -- main aim loop
-    local accumulator = 0
-    RunService.RenderStepped:Connect(function(dt)
-        if not isValid(LocalPlayer, "When selecting a player") then
-            return
-        end
-
-        if not camConfig.Enabled then return end
-        accumulator = accumulator + dt
-        if accumulator < 0.05 then return end
-        accumulator = 0
-
-        local targetPart = getTarget()
-        if targetPart then
-            local plr = Players:GetPlayerFromCharacter(targetPart.Parent)
-            if plr and isValid(plr, "Whilst a player is selected") then
-                local pred = Vector3.new(
-                    camConfig.Prediction.X,
-                    camConfig.Prediction.Y,
-                    camConfig.Prediction.Z
-                )
-                local aimPos = targetPart.Position + pred
-                local newCF  = CFrame.new(Camera.CFrame.Position, aimPos)
-                Camera.CFrame = Camera.CFrame:Lerp(newCF, camConfig.Snappiness)
-            end
-        end
-    end)
-end
 
 ---------------------------------------------------------
 -- Enhanced Silent Aimbot
@@ -825,16 +696,6 @@ LPH_JIT_MAX(function()
         end
         return oldIndex(obj, prop)
     end)
-
-    -- Optional auto-shoot
-    RunService.Heartbeat:Connect(function()
-        if Config["Enabled"] and cachedTarget then
-            local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-            if tool and tool:FindFirstChild("Activate") then
-                tool:Activate()
-            end
-        end
-    end)
 end)()
 
 -----------------------------------
@@ -885,9 +746,6 @@ game:GetService("UserInputService").InputEnded:Connect(function(input)
     end
 end)
 
---------------------
--- spread mod
--------------------
 
 -----------------------------
 -- Speed Modification 
