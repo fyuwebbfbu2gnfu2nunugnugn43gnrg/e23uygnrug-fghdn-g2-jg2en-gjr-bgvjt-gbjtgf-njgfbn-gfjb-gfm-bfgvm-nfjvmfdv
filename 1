@@ -103,10 +103,10 @@ TitleText.Parent = TitleBar
 TitleText.BackgroundTransparency = 1
 TitleText.Size = UDim2.new(1, -100, 1, 0)
 TitleText.Position = UDim2.new(0, 28, 0, 0)
-TitleText.Text = "Administrator: Stream"
+TitleText.Text = "Administrator: Steam"
 TitleText.Font = Enum.Font.SourceSans
 TitleText.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleText.TextSize = 18
+TitleText.TextSize = 16
 TitleText.TextXAlignment = Enum.TextXAlignment.Left
 
 CloseButton.Name = "CloseButton"
@@ -601,27 +601,21 @@ do
         if not ctx then return true end
 
         local char = plr.Character
-        if not char then
-            warn(("[CameraAim] %s has no Character"):format(plr.Name))
-            return false
-        end
+        if not char then return false end
 
         local body    = char:FindFirstChild("BodyEffects")
         local knocked = body and body:FindFirstChild("K.O") and body["K.O"].Value or false
         if knocked and ctx.Knocked then
-            warn(("[CameraAim] skipping %s because knocked"):format(plr.Name))
             return false
         end
 
         if plr == LocalPlayer and knocked and ctx["Self-Knocked"] then
-            warn("[CameraAim] not aiming: local player is knocked")
             return false
         end
 
         if ctx.Visible then
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if hrp and WallCheck(hrp) then
-                warn(("[CameraAim] skipping %s because not visible"):format(plr.Name))
                 return false
             end
         end
@@ -684,14 +678,12 @@ do
         if gp then return end
         if input.KeyCode == aimbotKey then
             camConfig.Enabled = not camConfig.Enabled
-            warn(("CameraAim is now %s"):format(tostring(camConfig.Enabled)))
         end
     end)
 
     -- main aim loop
     local accumulator = 0
     RunService.RenderStepped:Connect(function(dt)
-        -- enforce local KO/self‑knock
         if not isValid(LocalPlayer, "When selecting a player") then
             return
         end
@@ -713,7 +705,6 @@ do
                 local aimPos = targetPart.Position + pred
                 local newCF  = CFrame.new(Camera.CFrame.Position, aimPos)
                 Camera.CFrame = Camera.CFrame:Lerp(newCF, camConfig.Snappiness)
-                warn("[CameraAim] Aimed at "..plr.Name)
             end
         end
     end)
