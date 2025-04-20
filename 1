@@ -1,3 +1,246 @@
+getgenv().Mooze = {
+	['Global'] = {
+		['Enabled'] = true,
+
+		['Check'] = {
+			['Whilst a player is selected'] = {
+				['Knocked'] = true,
+				['Self-Knocked'] = true,
+				['Visible'] = false,
+			},
+
+			['When selecting a player'] = {
+				['Knocked'] = true,
+				['Self-Knocked'] = true,
+				['Visible'] = true,
+			}
+		},
+
+		['Keybind'] = "C"
+	},
+
+	['Silent Aimbot'] = {
+		['Enabled'] = true,
+		['Hit Part'] = 'Closest Point',
+
+		['Prediction'] = {
+			['X'] = 0,
+			['Y'] = 0,
+			['Z'] = 0
+		},
+
+		['Closest Point'] = {
+			['Mode'] = 'Advanced',
+			['Point Scale'] = 0.80
+		},
+
+		['Client Bullet Redirection'] = {
+			['Enabled'] = true,
+
+			['Prediction'] = {
+				['X'] = 0.035,
+				['Y'] = 0,
+				['Z'] = 0.035
+			},
+
+			['Weapons'] = {
+				'[Revolver]',
+				'[Rifle]',
+				'[Silencer]',
+				'[Glock]'
+			}
+		},
+
+		['FOV'] = {
+			['Enabled'] = true,
+
+			['Size'] = {
+				['X'] = 15,
+				['Y'] = 15,
+				['Z'] = 15
+			},
+
+			['Weapon Configuration'] = {
+				['Enabled'] = true,
+
+				['Shotguns'] = {
+					['X'] = 14.5,
+					['Y'] = 14.5,
+					['Z'] = 14.5
+				},
+
+				['Pistols'] = {
+					['X'] = 14.5,
+					['Y'] = 14.5,
+					['Z'] = 14.5
+				},
+
+				['Others'] = {
+					['X'] = 14.5,
+					['Y'] = 15.5,
+					['Z'] = 14.5
+				}
+			}
+		}
+	},
+
+	['Camera Aimbot'] = {
+		['Enabled'] = false,
+		['Hit Part'] = 'Closest Part',
+		['Snappiness'] = 0.006,
+
+		['Prediction'] = {
+			['X'] = 0.123,
+			['Y'] = 0,
+			['Z'] = 0.123
+		},
+
+		['Camera Modes'] = {
+			['Shift Locked'] = true,
+			['Third Person'] = false,
+			['First Person'] = true
+		},
+
+		['FOV'] = {
+			['Enabled'] = true,
+
+			['Size'] = {
+				['X'] = 5,
+				['Y'] = 5,
+				['Z'] = 5
+			},
+
+			['Weapon Configuration'] = {
+				['Enabled'] = true,
+
+				['Shotguns'] = {
+					['X'] = 15,
+					['Y'] = 15,
+					['Z'] = 15
+				},
+
+				['Pistols'] = {
+					['X'] = 15,
+					['Y'] = 15,
+					['Z'] = 15
+				},
+
+				['Others'] = {
+					['X'] = 15,
+					['Y'] = 15,
+					['Z'] = 15
+				}
+			}
+		}
+	},
+
+	['Trigger Bot'] = {
+		['Enabled'] = true,
+		['Click Cooldown'] = 0.00,
+
+		['Weapons'] = {
+			'[Double-Barrel SG]',
+			'[Revolver]',
+			'[TacticalShotgun]'
+		},
+
+		['Prediction'] = {
+			['X'] = 0.0,
+			['Y'] = 0,
+			['Z'] = 0.0
+		},
+
+		['Activation'] = {
+			['Activation Mode'] = 'Toggle',
+			['Activation Bind'] = 'V'
+		},
+
+		['FOV'] = {
+			['X'] = 15,
+			['Y'] = 15,
+			['Z'] = 15
+		},
+	},
+
+	['Velocity Calculation'] = {
+		['Enabled'] = true,
+		['Magnitude'] = 70
+	},
+
+['Weapon Modifications'] = {
+		['Spread Modifications'] = {
+			['Enabled'] = true,
+
+			['[Double-Barrel SG]'] = {
+				Multiplier = 1
+			},
+
+			['[TacticalShotgun]'] = {
+				Multiplier = 1
+			},
+
+			['[Shotgun]'] = {
+				Multiplier = 1
+			},
+
+			['[DrumShotgun]'] = {
+				Multiplier = 1
+			}
+		}
+	},
+
+	['Movement Modifications'] = {
+		['Slowdown Modifications'] = {
+			['Enabled'] = true,
+
+			['Weapons'] = {
+				['[Double-Barrel SG]'] = {
+					Multiplier = 0.0
+				},
+
+				['[TacticalShotgun]'] = {
+					Multiplier = 0.0
+				},
+
+				['[Revolver]'] = {	
+					Multiplier = 0.0
+				},
+
+				['[AUG]'] = {
+					Multiplier = 0.0
+				},
+
+				['[Silencer]'] = {
+					Multiplier = 0.0
+				},
+
+				['[Glock]'] = {
+					Multiplier = 0.0
+				},
+			}
+		},
+
+		['Speed Modifications'] = {
+			['Enabled'] = true,
+
+			['Normal'] = {
+				['Multiplier'] = 2.7
+			},
+
+			['Shooting'] = {
+				['Multiplier'] = 2.7
+			},
+
+			['Reloading'] = {
+				['Multiplier'] = 1.1
+			},
+
+			['Low Health'] = {
+				['Multiplier'] = 1.3
+			}
+		},
+	}
+}
 ----------------------------------------------------------------
 -- SERVICES & COMMON LOCALS
 ----------------------------------------------------------------
@@ -442,7 +685,7 @@ end
 -- Define GetClosestBodyPart (was missing!)
 local function GetClosestBodyPart(char)
     -- try head first, then root
-    for _, name in ipairs({"Head", "HumanoidRootPart"}) do
+    for _, name in ipairs({"Head", "UpperTorso", "HumanoidRootPart", "LowerTorso", "LeftHand", "RightHand", "LeftLowerArm", "RightLowerArm", "LeftUpperArm", "RightUpperArm", "LeftFoot", "LeftLowerLeg",  "LeftUpperLeg", "RightLowerLeg", "RightFoot",  "RightUpperLeg"}) do
         local p = char:FindFirstChild(name)
         if p and p:IsA("BasePart") then
             return p
@@ -563,6 +806,7 @@ RunService.Heartbeat:Connect(function(dt)
         Circle.Visible = false
     end
 end)
+
 
 --------------------------------------------------
 -- Camera Aimbot (with KO/Visibility Checks)
@@ -711,144 +955,6 @@ do
     end)
 end
 
----------------------------------------------------------
--- Enhanced Silent Aimbot
----------------------------------------------------------
--- Enhanced Silent Aimbot (FOV Accuracy Fix)
-if not LPH_OBFUSCATED then
-    LPH_JIT_MAX = function(...) return (...) end
-    LPH_NO_VIRTUALIZE = function(...) return (...) end
-end
-
-LPH_JIT_MAX(function()
-    local Config = getgenv().Mooze["Silent Aimbot"]
-    local Players = game:GetService("Players")
-    local RunService = game:GetService("RunService")
-    local UserInputService = game:GetService("UserInputService")
-    local LocalPlayer = Players.LocalPlayer
-    local Camera = workspace.CurrentCamera
-
-    local cachedTarget = nil
-
-    -- Utility: Check if a player is valid
-    local function isValidTarget(player)
-        return player ~= LocalPlayer
-           and player.Character
-           and player.Character:FindFirstChild("Humanoid")
-           and player.Character.Humanoid.Health > 0
-    end
-
-    -- Utility: Team Check
-    local function isEnemy(player)
-        if not Config["Team Check"] then return true end
-        return player.Team ~= LocalPlayer.Team
-    end
-
-    -- Drawing FOV circle
-    local FOVCircle = Drawing.new("Circle")
-    FOVCircle.Thickness = 2
-    FOVCircle.NumSides = 100
-    FOVCircle.Filled = false
-    FOVCircle.Transparency = 1
-
-    -- Convert world-space FOV angle to pixel radius
-    local function worldFovToPixels(angleDeg)
-        local fovRad = math.rad(angleDeg)
-        local halfScreen = Camera.ViewportSize.Y / 2
-        local screenFovRad = math.rad(Camera.FieldOfView / 2)
-        return math.tan(fovRad) * (halfScreen / math.tan(screenFovRad))
-    end
-
-    -- Update FOV, draw, and select target using world-angle method
-    local function updateFOV()
-        local fovCfg = Config["FOV"]
-        local angleDeg = fovCfg["Size"].X * 7 -- user config angle in degrees
-        local pixelRadius = worldFovToPixels(angleDeg)
-
-        -- Weapon-specific scaling (optional override angle)
-        if fovCfg["Weapons Configuration"] and fovCfg["Weapons Configuration"]["Enabled"] then
-            local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-            if tool then
-                local tname = string.lower(tool.Name)
-                if string.find(tname, "shotgun") then
-                    angleDeg = fovCfg["Weapons Configuration"]["Shotguns"].X * 7
-                elseif string.find(tname, "pistol") then
-                    angleDeg = fovCfg["Weapons Configuration"]["Pistols"].X * 7
-                end
-                pixelRadius = worldFovToPixels(angleDeg)
-            end
-        end
-
-        FOVCircle.Visible = fovCfg["Enabled"]
-        FOVCircle.Position = UserInputService:GetMouseLocation()
-        FOVCircle.Radius = pixelRadius
-
-        -- Find best target within world-space FOV
-        local bestPart, bestAngle = nil, math.huge
-        for _, pl in pairs(Players:GetPlayers()) do
-            if isValidTarget(pl) and isEnemy(pl) then
-                local part = (Config["Hit Part"] == "Closest Point") and pl.Character and (function()
-                        -- reuse original getClosestPart logic if desired
-                        local closest, shortest = nil, math.huge
-                        for _, p in pairs(pl.Character:GetDescendants()) do
-                            if p:IsA("BasePart") then
-                                local dir = (p.Position - Camera.CFrame.Position).Unit
-                                local ang = math.deg(math.acos(Camera.CFrame.LookVector:Dot(dir)))
-                                if ang < shortest then
-                                    closest, shortest = p, ang
-                                end
-                            end
-                        end
-                        return closest
-                    end)() or pl.Character and pl.Character:FindFirstChild("Head")
-                if part then
-                    local dir = (part.Position - Camera.CFrame.Position).Unit
-                    local ang = math.deg(math.acos(Camera.CFrame.LookVector:Dot(dir)))
-                    if ang <= angleDeg and ang < bestAngle then
-                        bestPart, bestAngle = part, ang
-                    end
-                end
-            end
-        end
-        cachedTarget = bestPart
-    end
-    RunService.RenderStepped:Connect(updateFOV)
-
-    -- Apply prediction offset
-    local function applyPrediction(cf, offset)
-        return cf * CFrame.new(offset.X * 7, offset.Y, offset.Z)
-    end
-
-    -- Hijack Mouse Hit/Target when inside FOV
-    local mt = getrawmetatable(game)
-    setreadonly(mt, false)
-    local originalIndex = mt.__index
-    mt.__index = newcclosure(function(self, prop)
-        if self:IsA("Mouse") and (prop == "Hit" or prop == "Target") then
-            if cachedTarget then
-                local pred = Config["Prediction"]
-                local redir = Config["Client Bullet Redirection"]
-                local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                if redir["Enabled"] and tool then
-                    for _, wname in ipairs(redir["Weapons"]) do
-                        if string.find(string.lower(tool.Name), string.lower(wname)) then
-                            pred = redir["Prediction"]
-                            break
-                        end
-                    end
-                end
-                local velocityOffset = cachedTarget.Velocity * Vector3.new(pred.X * 7, pred.Y, pred.Z)
-                if prop == "Hit" then
-                    return applyPrediction(cachedTarget.CFrame, velocityOffset)
-                else
-                    return cachedTarget
-                end
-            end
-        end
-        return originalIndex(self, prop)
-    end)
-    setreadonly(mt, true)
-end)()
 -----------------------------------
 -- Slowdown Modification 
 -----------------------------------
@@ -896,6 +1002,147 @@ game:GetService("UserInputService").InputEnded:Connect(function(input)
         is_firing = false
     end
 end)
+
+--------------------------------------
+-- spread mod (lag‑free version)
+--------------------------------------
+-- services & shortcuts
+local Players = game:GetService("Players")
+local player  = Players.LocalPlayer
+local task    = task
+
+-- your base spreads
+local ORIGINAL_H = 0.01
+local ORIGINAL_V = 0.01
+
+-- state
+local originalConstants = {}    -- [fn][idx] = orig
+local patchedFns        = {}    -- fn -> true
+local fnCache           = {}    -- weaponKeyNorm -> { fn, fn, … }
+local discovered        = false
+
+local function normalize(s)
+    return tostring(s):lower():gsub("%W", "")
+end
+
+local function getSpreadConfig()
+    local g = getgenv().Mooze
+    return g
+       and g["Weapon Modifications"]
+       and g["Weapon Modifications"]["Spread Modifications"]
+end
+
+-- undo everything
+local function restoreAll()
+    for fn, idxs in pairs(originalConstants) do
+        for idx, orig in pairs(idxs) do
+            pcall(debug.setconstant, fn, idx, orig)
+        end
+    end
+end
+
+-- cache all the weapon‑script closures
+local function discoverFunctions()
+    if discovered then return end
+    local cfg = getSpreadConfig()
+    if not (cfg and cfg.Enabled ~= nil) then return end
+
+    for weaponKey, settings in pairs(cfg) do
+        if weaponKey ~= "Enabled" and type(settings) == "table" then
+            local keyNorm = normalize(weaponKey)
+            fnCache[keyNorm] = {}
+
+            for _, fn in ipairs(getgc(true)) do
+                if type(fn)=="function"
+                and islclosure(fn)
+                and not isexecutorclosure(fn)
+                then
+                    local src = debug.getinfo(fn).short_src or ""
+                    if normalize(src):find(keyNorm,1,true) then
+                        table.insert(fnCache[keyNorm], fn)
+                    end
+                end
+            end
+        end
+    end
+
+    discovered = true
+end
+
+-- patch _one_ function, but only the first time we see it
+local function patchFunction(fn, mult)
+    if patchedFns[fn] then return end
+    patchedFns[fn] = true
+
+    originalConstants[fn] = {}
+    local hSpread = ORIGINAL_H * mult
+    local vSpread = ORIGINAL_V * mult
+
+    for idx, const in ipairs(debug.getconstants(fn)) do
+        if type(const) == "number" then
+            if const > 0    and const < 0.1 then
+                originalConstants[fn][idx] = const
+                pcall(debug.setconstant, fn, idx, hSpread)
+            elseif const >= 0.1 and const < 0.3 then
+                originalConstants[fn][idx] = const
+                pcall(debug.setconstant, fn, idx, vSpread)
+            end
+        end
+        task.wait()  -- tiny yield each constant
+    end
+end
+
+-- one pass of patches; after everything's seen once, we never do this again
+local function applySpreadOnce()
+    local cfg = getSpreadConfig()
+    if not cfg then return end
+
+    if not cfg.Enabled then
+        restoreAll()
+        return
+    end
+
+    discoverFunctions()
+
+    -- if nothing to patch yet, bail and retry shortly
+    local anyToDo = false
+    for weaponKey, settings in pairs(cfg) do
+        if weaponKey ~= "Enabled" and type(settings) == "table" then
+            local mult    = settings.Multiplier or 1
+            local keyNorm = normalize(weaponKey)
+            local fns     = fnCache[keyNorm] or {}
+
+            if #fns > 0 then
+                anyToDo = true
+                for _, fn in ipairs(fns) do
+                    patchFunction(fn, mult)
+                end
+            end
+        end
+    end
+
+    -- if we never saw _any_ functions yet, retry once after 1 second
+    if not anyToDo then
+        task.delay(1, applySpreadOnce)
+    end
+end
+
+-- respawn handler
+local function onCharacterAdded()
+    -- reset state
+    originalConstants = {}
+    patchedFns        = {}
+    fnCache           = {}
+    discovered        = false
+
+    -- wait a moment for modules to load, then do one full pass
+    task.delay(1, applySpreadOnce)
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+if player.Character then
+    onCharacterAdded()
+end
 
 -----------------------------
 -- Speed Modification 
@@ -964,7 +1211,7 @@ RunService.RenderStepped:Connect(function()
     end
 
     -- here’s the magic: multiply by 100
-    local targetSpeed = multiplier * 70
+    local targetSpeed = multiplier * 50
 
     if humanoid.WalkSpeed ~= targetSpeed then
         humanoid.WalkSpeed = targetSpeed
